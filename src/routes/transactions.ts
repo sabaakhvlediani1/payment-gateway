@@ -32,7 +32,7 @@ export async function transactionRoutes(app: FastifyInstance) {
     }
   });
 
-  // Optional: fetch transaction by internal ID
+  // Fetch transaction by internal ID
   app.get("/transactions/:id", async (request, reply) => {
     const { id } = request.params as any;
     const transaction = getTransaction(id);

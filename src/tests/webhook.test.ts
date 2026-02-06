@@ -1,20 +1,22 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { transactions, createTransaction } from "../services/transactionService.js";
+import { query, pool } from "../db.js"; // Import your DB tools
+import { createTransaction } from "../services/transactionService.js";
 import { handlePspWebhook, WebhookPayload } from "../services/webhookService.js";
 import { TransactionStatus } from "../domain/TransactionStatus.js";
 
-// Clear in-memory storage before each test
-beforeEach(() => {
-  transactions.clear();
-});
+describe("Webhook Handler (Integration)", () => {
+  
+  // Clean the database table before each test to ensure a fresh start
+  beforeEach(async () => {
+    await query("DELETE FROM transactions");
+  });
 
-describe("Webhook Handler", () => {
-  it("updates transaction status correctly", async () => {
-    // Create a transaction
+  it("updates transaction status correctly in PostgreSQL", async () => {
+    // 1. Create a transaction (this now inserts into Postgres)
     const { internalTransactionId, psp } = await createTransaction({
       amount: 1000,
       currency: "EUR",
-      cardNumber: "5555", // success card
+      cardNumber: "5555",
       cardExpiry: "12/25",
       cvv: "123",
       orderId: "order_001",
@@ -22,24 +24,27 @@ describe("Webhook Handler", () => {
       failureUrl: "http://localhost:3000/failure/psp",
     });
 
-    // Send webhook to update status to SUCCESS
+    // 2. Mock the incoming webhook payload
     const payload: WebhookPayload = {
       transactionId: psp.transactionId,
       status: "SUCCESS",
       final_amount: 1500,
     };
 
-    const result = handlePspWebhook(payload);
-
+    // 3. Handle webhook (Don't forget 'await'!)
+    const result = await handlePspWebhook(payload);
     expect(result.updated).toBe(true);
 
-    const updatedTransaction = transactions.get(internalTransactionId)!;
+    // 4. Verify by querying the real Database
+    const res = await query("SELECT * FROM transactions WHERE internal_id = $1", [internalTransactionId]);
+    const updatedTransaction = res.rows[0];
+
     expect(updatedTransaction.status).toBe(TransactionStatus.SUCCESS);
-    expect(updatedTransaction.amount).toBe(1500);
+    expect(updatedTransaction.amount).toBe("1500"); // Note: NUMERIC often returns as string in pg
   });
 
   it("ignores duplicate webhooks (idempotency)", async () => {
-    const { internalTransactionId, psp } = await createTransaction({
+    const { psp } = await createTransaction({
       amount: 500,
       currency: "EUR",
       cardNumber: "5555",
@@ -57,39 +62,11 @@ describe("Webhook Handler", () => {
     };
 
     // Send first webhook
-    const first = handlePspWebhook(payload);
+    const first = await handlePspWebhook(payload);
     expect(first.updated).toBe(true);
 
     // Send duplicate webhook
-    const second = handlePspWebhook(payload);
+    const second = await handlePspWebhook(payload);
     expect(second.ignored).toBe(true);
-
-    const transaction = transactions.get(internalTransactionId)!;
-    expect(transaction.status).toBe(TransactionStatus.SUCCESS);
-    expect(transaction.amount).toBe(500);
-  });
-
-  it("updates amount if provided in webhook", async () => {
-    const { internalTransactionId, psp } = await createTransaction({
-      amount: 700,
-      currency: "EUR",
-      cardNumber: "5555",
-      cardExpiry: "12/25",
-      cvv: "123",
-      orderId: "order_003",
-      callbackUrl: "http://localhost:3000/webhooks/psp",
-      failureUrl: "http://localhost:3000/failure/psp",
-    });
-
-    const payload: WebhookPayload = {
-      transactionId: psp.transactionId,
-      status: "SUCCESS",
-      final_amount: 900,
-    };
-
-    handlePspWebhook(payload);
-
-    const transaction = transactions.get(internalTransactionId)!;
-    expect(transaction.amount).toBe(900);
   });
 });

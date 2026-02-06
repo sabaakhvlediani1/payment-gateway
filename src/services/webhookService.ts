@@ -1,5 +1,4 @@
-import { transactions } from "./transactionService.js";
-import { Transaction } from "../domain/Transaction.js";
+import { query } from "../db.js";
 import { TransactionStatus } from "../domain/TransactionStatus.js";
 
 export interface WebhookPayload {
@@ -8,43 +7,60 @@ export interface WebhookPayload {
   status: "SUCCESS" | "FAILED" | "3DS_REQUIRED";
 }
 
-// Keep track of already processed PSP webhooks for idempotency
+// Simple in-memory idempotency (OK for now)
 const processedWebhooks = new Set<string>();
 
-export function handlePspWebhook(payload: WebhookPayload) {
+export async function handlePspWebhook(payload: WebhookPayload) {
   const uniqueWebhookKey = `${payload.transactionId}-${payload.status}-${payload.final_amount || 0}`;
 
-  // Idempotency: ignore duplicates
+  // Idempotency
   if (processedWebhooks.has(uniqueWebhookKey)) {
     console.log(`[Webhook] Duplicate webhook ignored: ${uniqueWebhookKey}`);
     return { ignored: true };
   }
   processedWebhooks.add(uniqueWebhookKey);
 
-  const transaction = [...transactions.values()].find(
-    (t) => t.pspTransactionId === payload.transactionId
+  // Fetch transaction by PSP transaction ID
+  const res = await query(
+    `SELECT * FROM transactions WHERE psp_transaction_id = $1`,
+    [payload.transactionId]
   );
 
+  const transaction = res.rows[0];
   if (!transaction) {
     throw new Error(`Transaction not found for PSP ID ${payload.transactionId}`);
   }
 
-  // Update amount if provided
-  if (payload.final_amount !== undefined) {
-    transaction.amount = payload.final_amount;
-  }
-
-  // Only transition if status is different
+  // Map PSP status → internal status
   const targetStatus = mapPspStatusToInternal(payload.status);
-  if (transaction.status !== targetStatus) {
-    transaction.transitionTo(targetStatus);
+
+  // Avoid invalid state transitions (SUCCESS → SUCCESS etc.)
+  if (transaction.status === targetStatus) {
+    return { updated: false, status: transaction.status };
   }
 
-  return { updated: true, status: transaction.status };
+  // Update DB
+  if (payload.final_amount !== undefined) {
+    await query(
+      `UPDATE transactions
+       SET status = $1, amount = $2
+       WHERE internal_id = $3`,
+      [targetStatus, payload.final_amount, transaction.internal_id]
+    );
+  } else {
+    await query(
+      `UPDATE transactions
+       SET status = $1
+       WHERE internal_id = $2`,
+      [targetStatus, transaction.internal_id]
+    );
+  }
+
+  return { updated: true, status: targetStatus };
 }
 
-// Helper function
-function mapPspStatusToInternal(status: string) {
+// Helper
+function mapPspStatusToInternal(status: string): TransactionStatus {
   switch (status) {
     case "SUCCESS":
       return TransactionStatus.SUCCESS;
@@ -55,10 +71,4 @@ function mapPspStatusToInternal(status: string) {
     default:
       throw new Error(`Unknown PSP status: ${status}`);
   }
-}
-
-
-// Helper: get all transactions from in-memory map
-function getAllTransactions(): Transaction[] {
-  return Array.from(transactions.values());
 }

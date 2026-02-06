@@ -48,16 +48,16 @@ export async function createPspTransaction(
   }
 }
 
-/**
- * Simulate sending webhook after delay
- */
+
+ // Simulate sending webhook after delay
+ 
 export async function sendPspWebhook(
   transactionId: string,
   callbackUrl: string,
   finalStatus: "SUCCESS" | "FAILED",
   finalAmount: number
 ) {
-  // simulate async delay (3 sec)
+  // simulate async delay
   await setTimeout(3000);
 
   // in real scenario we would call callbackUrl via HTTP POST

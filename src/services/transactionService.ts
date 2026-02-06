@@ -1,9 +1,6 @@
 import { createPspTransaction } from "../psp/pspSimulator.js";
-import { Transaction } from "../domain/Transaction.js";
 import { TransactionStatus } from "../domain/TransactionStatus.js";
-
-// In-memory storage for now (replace with DB later)
-export const transactions = new Map<string, Transaction>(); // <-- EXPORT HERE
+import { query } from "../db.js";
 
 export interface CreateTransactionPayload {
   amount: number;
@@ -17,39 +14,53 @@ export interface CreateTransactionPayload {
 }
 
 export async function createTransaction(payload: CreateTransactionPayload) {
-  // Generate internal transaction ID
   const internalId = `internal_${Math.random().toString(36).substring(2, 10)}`;
 
-  // Create internal transaction object
-  const transaction = new Transaction(internalId, TransactionStatus.CREATED, payload.amount);
-
-  // Store in memory
-  transactions.set(internalId, transaction);
-
-  // Call PSP simulator
+  // Call PSP
   const pspResponse = await createPspTransaction(payload);
 
-  // Map PSP status to internal transaction status
-  if (pspResponse.status === "SUCCESS") {
-    transaction.transitionTo(TransactionStatus.SUCCESS);
-  } else if (pspResponse.status === "FAILED") {
-    transaction.transitionTo(TransactionStatus.FAILED);
-  } else if (pspResponse.status === "PENDING_3DS") {
-    transaction.transitionTo(TransactionStatus.PENDING_3DS);
-  }
+  // Map PSP status
+  let status: TransactionStatus = TransactionStatus.CREATED;
+  if (pspResponse.status === "SUCCESS") status = TransactionStatus.SUCCESS;
+  if (pspResponse.status === "FAILED") status = TransactionStatus.FAILED;
+  if (pspResponse.status === "PENDING_3DS") status = TransactionStatus.PENDING_3DS;
 
-  // Save PSP transaction ID to internal transaction for webhook mapping
-  transaction.pspTransactionId = pspResponse.transactionId;
+  // Save to DB
+  await query(
+    `INSERT INTO transactions (internal_id, psp_transaction_id, status, amount)
+     VALUES ($1, $2, $3, $4)`,
+    [internalId, pspResponse.transactionId, status, payload.amount]
+  );
 
-  // Return both internal & PSP info
   return {
     internalTransactionId: internalId,
-    status: transaction.status,
+    status,
     psp: pspResponse,
   };
 }
 
-// Helper to fetch transaction by internal ID
-export function getTransaction(internalId: string) {
-  return transactions.get(internalId);
+export async function getTransaction(internalId: string) {
+  const res = await query(
+    `SELECT * FROM transactions WHERE internal_id = $1`,
+    [internalId]
+  );
+  return res.rows[0];
+}
+
+export async function updateTransaction(
+  internalId: string,
+  status: TransactionStatus,
+  amount?: number
+) {
+  if (amount !== undefined) {
+    await query(
+      `UPDATE transactions SET status = $1, amount = $2 WHERE internal_id = $3`,
+      [status, amount, internalId]
+    );
+  } else {
+    await query(
+      `UPDATE transactions SET status = $1 WHERE internal_id = $2`,
+      [status, internalId]
+    );
+  }
 }
