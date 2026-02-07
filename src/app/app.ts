@@ -12,7 +12,7 @@ export function buildApp() {
   app.register(healthRoutes);
   app.register(pspRoutes);
   app.register(transactionRoutes);
-   app.register(webhookRoutes); 
+  app.register(webhookRoutes);
 
   return app;
 }

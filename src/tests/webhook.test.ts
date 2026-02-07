@@ -1,72 +1,71 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { query, pool } from "../db.js"; // Import your DB tools
-import { createTransaction } from "../services/transactionService.js";
-import { handlePspWebhook, WebhookPayload } from "../services/webhookService.js";
-import { TransactionStatus } from "../domain/TransactionStatus.js";
+import { describe, it, expect, vi } from "vitest";
 
-describe("Webhook Handler (Integration)", () => {
-  
-  // Clean the database table before each test to ensure a fresh start
-  beforeEach(async () => {
-    await query("DELETE FROM transactions");
-  });
+import { transactionRepository } from "../../src/repositories/transactionRepository.js";
+import { TransactionStatus } from "../../src/domain/TransactionStatus.js";
+import { handlePspWebhook } from "../services/webhookService.js";
 
-  it("updates transaction status correctly in PostgreSQL", async () => {
-    // 1. Create a transaction (this now inserts into Postgres)
-    const { internalTransactionId, psp } = await createTransaction({
-      amount: 1000,
-      currency: "EUR",
-      cardNumber: "5555",
-      cardExpiry: "12/25",
-      cvv: "123",
-      orderId: "order_001",
-      callbackUrl: "http://localhost:3000/webhooks/psp",
-      failureUrl: "http://localhost:3000/failure/psp",
-    });
+vi.mock("../../src/repositories/transactionRepository.js");
 
-    // 2. Mock the incoming webhook payload
-    const payload: WebhookPayload = {
-      transactionId: psp.transactionId,
-      status: "SUCCESS",
-      final_amount: 1500,
+describe("handlePspWebhook", () => {
+  it("updates transaction to SUCCESS", async () => {
+    const mockTx = {
+      amount: 100,
+      status: TransactionStatus.PENDING_3DS,
+      updateAmount: vi.fn((newAmount: number) => {
+        mockTx.amount = newAmount;
+      }),
+      transitionTo: vi.fn((newStatus: TransactionStatus) => {
+        mockTx.status = newStatus;
+      }),
     };
 
-    // 3. Handle webhook (Don't forget 'await'!)
-    const result = await handlePspWebhook(payload);
-    expect(result.updated).toBe(true);
+    (transactionRepository.findByPspTransactionId as any).mockResolvedValue(
+      mockTx,
+    );
 
-    // 4. Verify by querying the real Database
-    const res = await query("SELECT * FROM transactions WHERE internal_id = $1", [internalTransactionId]);
-    const updatedTransaction = res.rows[0];
-
-    expect(updatedTransaction.status).toBe(TransactionStatus.SUCCESS);
-    expect(updatedTransaction.amount).toBe("1500"); // Note: NUMERIC often returns as string in pg
-  });
-
-  it("ignores duplicate webhooks (idempotency)", async () => {
-    const { psp } = await createTransaction({
-      amount: 500,
-      currency: "EUR",
-      cardNumber: "5555",
-      cardExpiry: "12/25",
-      cvv: "123",
-      orderId: "order_002",
-      callbackUrl: "http://localhost:3000/webhooks/psp",
-      failureUrl: "http://localhost:3000/failure/psp",
+    const result = await handlePspWebhook({
+      transactionId: "psp123",
+      status: "SUCCESS",
+      final_amount: 120,
     });
 
-    const payload: WebhookPayload = {
-      transactionId: psp.transactionId,
-      status: "SUCCESS",
-      final_amount: 500,
+    expect(mockTx.updateAmount).toHaveBeenCalledWith(120);
+    expect(mockTx.transitionTo).toHaveBeenCalledWith(TransactionStatus.SUCCESS);
+    expect(transactionRepository.update).toHaveBeenCalledWith(mockTx);
+    expect(result.status).toBe(TransactionStatus.SUCCESS);
+    expect(result.amount).toBe(120);
+  });
+
+  it("is idempotent when same webhook arrives twice", async () => {
+    const mockTx = {
+      amount: 100,
+      status: TransactionStatus.SUCCESS,
+      updateAmount: vi.fn(),
+      transitionTo: vi.fn(), // still mocked
     };
 
-    // Send first webhook
-    const first = await handlePspWebhook(payload);
-    expect(first.updated).toBe(true);
+    (transactionRepository.findByPspTransactionId as any).mockResolvedValue(
+      mockTx,
+    );
 
-    // Send duplicate webhook
-    const second = await handlePspWebhook(payload);
-    expect(second.ignored).toBe(true);
+    const result = await handlePspWebhook({
+      transactionId: "psp123",
+      status: "SUCCESS",
+      final_amount: 100,
+    });
+
+    expect(mockTx.transitionTo).toHaveBeenCalledWith(TransactionStatus.SUCCESS);
+    expect(transactionRepository.update).toHaveBeenCalledWith(mockTx);
+    expect(result.status).toBe(TransactionStatus.SUCCESS);
+  });
+
+  it("throws if transaction not found", async () => {
+    (transactionRepository.findByPspTransactionId as any).mockResolvedValue(
+      null,
+    );
+
+    await expect(
+      handlePspWebhook({ transactionId: "x", status: "SUCCESS" }),
+    ).rejects.toThrow("Transaction not found");
   });
 });

@@ -1,48 +1,57 @@
 import { FastifyInstance } from "fastify";
-import {
-  createPspTransaction,
-  sendPspWebhook,
-} from "../psp/pspSimulator.js";
+import { createPspTransaction, sendPspWebhook } from "../psp/pspSimulator.js";
 
 export async function pspRoutes(app: FastifyInstance) {
-  app.post("/psp/transactions", async (request, reply) => {
-    const body = request.body as any;
+  app.post(
+    "/psp/transactions",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: [
+            "amount",
+            "currency",
+            "cardNumber",
+            "cardExpiry",
+            "cvv",
+            "orderId",
+            "callbackUrl",
+            "failureUrl",
+          ],
+          properties: {
+            amount: { type: "number" },
+            currency: { type: "string" },
+            cardNumber: { type: "string" },
+            cardExpiry: { type: "string" },
+            cvv: { type: "string" },
+            orderId: { type: "string" },
+            callbackUrl: { type: "string" },
+            failureUrl: { type: "string" },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const body = request.body as any;
+      const pspResponse = await createPspTransaction(body);
+      return reply.send(pspResponse);
+    },
+  );
 
-    if (
-      !body.amount ||
-      !body.currency ||
-      !body.cardNumber ||
-      !body.cardExpiry ||
-      !body.cvv ||
-      !body.orderId ||
-      !body.callbackUrl ||
-      !body.failureUrl
-    ) {
-      return reply.status(400).send({ error: "Invalid request" });
-    }
-
-    const pspResponse = await createPspTransaction(body);
-
-    // If 3DS, simulate webhook after user finishes 3DS
-    if (pspResponse.status === "PENDING_3DS" && pspResponse.threeDsRedirectUrl) {
-      // simulate 3DS success after 5 sec
-      sendPspWebhook(
-        pspResponse.transactionId,
-        body.callbackUrl,
-        "SUCCESS",
-        body.amount
-      );
-    }
-
-    return reply.send(pspResponse);
-  });
-
-  // Fake 3DS endpoint
+  // Fake 3DS completion endpoint
   app.get("/psp/3ds/:transactionId", async (request, reply) => {
-    const { transactionId } = request.params as any;
+    const { transactionId } = request.params as { transactionId: string };
+    const { callbackUrl, amount } = request.query as {
+      callbackUrl: string;
+      amount: string;
+    };
+
+    setTimeout(() => {
+      sendPspWebhook(transactionId, callbackUrl, Number(amount), "SUCCESS");
+    }, 5000);
+
     return reply.send({
-      message: `Simulated 3DS page for transaction ${transactionId}`,
-      completeUrl: `http://localhost:3000/webhooks/psp`,
+      message: `3DS authentication completed for ${transactionId}`,
     });
   });
 }

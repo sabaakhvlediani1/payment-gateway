@@ -1,4 +1,7 @@
 import { setTimeout } from "timers/promises";
+import { randomUUID } from "crypto";
+
+export type PspStatus = "PENDING_3DS" | "SUCCESS" | "FAILED";
 
 interface PspTransactionRequest {
   amount: number;
@@ -13,7 +16,7 @@ interface PspTransactionRequest {
 
 interface PspTransactionResponse {
   transactionId: string;
-  status: "PENDING_3DS" | "SUCCESS" | "FAILED";
+  status: PspStatus;
   threeDsRedirectUrl?: string;
 }
 
@@ -21,48 +24,57 @@ export async function createPspTransaction(
   req: PspTransactionRequest
 ): Promise<PspTransactionResponse> {
   const prefix = req.cardNumber.slice(0, 4);
-  const transactionId = `tx_${Math.random().toString(36).substring(2, 10)}`;
+  const transactionId = `tx_${randomUUID()}`;
 
   switch (prefix) {
     case "4111":
       return {
         transactionId,
         status: "PENDING_3DS",
-        threeDsRedirectUrl: `http://localhost:3000/psp/3ds/${transactionId}`,
+        threeDsRedirectUrl: `http://localhost:3000/psp/3ds/${transactionId}?callbackUrl=${encodeURIComponent(req.callbackUrl)}&amount=${req.amount}`,
       };
+
     case "5555":
-      return {
-        transactionId,
-        status: "SUCCESS",
-      };
+      await sendPspWebhook(transactionId, req.callbackUrl, req.amount, "SUCCESS");
+      return { transactionId, status: "SUCCESS" };
+
     case "4000":
-      return {
-        transactionId,
-        status: "FAILED",
-      };
     default:
-      return {
-        transactionId,
-        status: "FAILED",
-      };
+      await sendPspWebhook(transactionId, req.callbackUrl, req.amount, "FAILED");
+      return { transactionId, status: "FAILED" };
   }
 }
 
+export async function complete3dsChallenge(
+  transactionId: string,
+  callbackUrl: string,
+  amount: number
+) {
+  await setTimeout(2000);
 
- // Simulate sending webhook after delay
- 
+  const finalStatus: "SUCCESS" | "FAILED" =
+    transactionId.length % 2 === 0 ? "SUCCESS" : "FAILED";
+
+  await sendPspWebhook(transactionId, callbackUrl, amount, finalStatus);
+
+  return { transactionId, finalStatus };
+}
+
 export async function sendPspWebhook(
   transactionId: string,
   callbackUrl: string,
-  finalStatus: "SUCCESS" | "FAILED",
-  finalAmount: number
+  finalAmount: number,
+  finalStatus: "SUCCESS" | "FAILED"
 ) {
-  // simulate async delay
-  await setTimeout(3000);
+  await setTimeout(1000);
 
-  // in real scenario we would call callbackUrl via HTTP POST
-  console.log(
-    `[PSP Simulator] Sending webhook to ${callbackUrl} for ${transactionId} with status ${finalStatus}`
-  );
-  // For now we just log; real implementation will use axios.post(callbackUrl, {...})
+  await fetch(callbackUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      transactionId,
+      final_amount: finalAmount,
+      status: finalStatus,
+    }),
+  });
 }

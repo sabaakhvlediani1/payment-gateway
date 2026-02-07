@@ -1,44 +1,53 @@
 import { FastifyInstance } from "fastify";
-import { createTransaction, getTransaction } from "../services/transactionService.js";
+import { createTransaction, getTransactionById } from "../services/transactionService.js";
 
 export async function transactionRoutes(app: FastifyInstance) {
-  // Create transaction
-  app.post("/transactions", async (request, reply) => {
+  app.post("/transactions", {
+    schema: {
+      body: {
+        type: "object",
+        required: [
+          "amount",
+          "currency",
+          "cardNumber",
+          "cardExpiry",
+          "cvv",
+          "orderId",
+          "callbackUrl",
+          "failureUrl",
+        ],
+        properties: {
+          amount: { type: "number" },
+          currency: { type: "string" },
+          cardNumber: { type: "string" },
+          cardExpiry: { type: "string" },
+          cvv: { type: "string" },
+          orderId: { type: "string" },
+          callbackUrl: { type: "string" },
+          failureUrl: { type: "string" },
+        },
+      },
+    },
+  }, async (request, reply) => {
     try {
-      const body = request.body as any;
-
-      // Basic validation
-      const requiredFields = [
-        "amount",
-        "currency",
-        "cardNumber",
-        "cardExpiry",
-        "cvv",
-        "orderId",
-        "callbackUrl",
-        "failureUrl",
-      ];
-
-      for (const field of requiredFields) {
-        if (!body[field]) {
-          return reply.status(400).send({ error: `${field} is required` });
-        }
-      }
-
-      const result = await createTransaction(body);
-      return reply.send(result);
+      const result = await createTransaction(request.body as any);
+      return reply.code(201).send(result);
     } catch (err: any) {
-      return reply.status(500).send({ error: err.message });
+      if (err.name === "ValidationError") {
+        return reply.code(400).send({ error: err.message });
+      }
+      return reply.code(500).send({ error: "Internal Server Error" });
     }
   });
 
-  // Fetch transaction by internal ID
   app.get("/transactions/:id", async (request, reply) => {
-    const { id } = request.params as any;
-    const transaction = getTransaction(id);
+    const { id } = request.params as { id: string };
+    const transaction = await getTransactionById(id);
+
     if (!transaction) {
-      return reply.status(404).send({ error: "Transaction not found" });
+      return reply.code(404).send({ error: "Transaction not found" });
     }
+
     return reply.send(transaction);
   });
 }

@@ -1,6 +1,9 @@
 import { createPspTransaction } from "../psp/pspSimulator.js";
+import { Transaction } from "../domain/Transaction.js";
 import { TransactionStatus } from "../domain/TransactionStatus.js";
-import { query } from "../db.js";
+
+import { randomUUID } from "crypto";
+import { transactionRepository } from "../repositories/transactionRepository.js";
 
 export interface CreateTransactionPayload {
   amount: number;
@@ -13,54 +16,48 @@ export interface CreateTransactionPayload {
   failureUrl: string;
 }
 
-export async function createTransaction(payload: CreateTransactionPayload) {
-  const internalId = `internal_${Math.random().toString(36).substring(2, 10)}`;
+function mapPspStatusToInternal(
+  pspStatus: string
+): TransactionStatus {
+  switch (pspStatus) {
+    case "SUCCESS":
+      return TransactionStatus.SUCCESS;
+    case "FAILED":
+      return TransactionStatus.FAILED;
+    case "PENDING_3DS":
+      return TransactionStatus.PENDING_3DS;
+    default:
+      throw new Error(`Unknown PSP status: ${pspStatus}`);
+  }
+}
+
+export async function createTransaction(
+  payload: CreateTransactionPayload
+) {
+  const internalId = randomUUID();
+
+  // Create domain entity
+  const transaction = Transaction.create(internalId, payload.amount);
 
   // Call PSP
   const pspResponse = await createPspTransaction(payload);
 
-  // Map PSP status
-  let status: TransactionStatus = TransactionStatus.CREATED;
-  if (pspResponse.status === "SUCCESS") status = TransactionStatus.SUCCESS;
-  if (pspResponse.status === "FAILED") status = TransactionStatus.FAILED;
-  if (pspResponse.status === "PENDING_3DS") status = TransactionStatus.PENDING_3DS;
+  transaction.attachPspTransactionId(pspResponse.transactionId);
 
-  // Save to DB
-  await query(
-    `INSERT INTO transactions (internal_id, psp_transaction_id, status, amount)
-     VALUES ($1, $2, $3, $4)`,
-    [internalId, pspResponse.transactionId, status, payload.amount]
-  );
+  // Transition state safely
+  const newStatus = mapPspStatusToInternal(pspResponse.status);
+  transaction.transitionTo(newStatus);
+
+  // Persist
+  await transactionRepository.save(transaction);
 
   return {
-    internalTransactionId: internalId,
-    status,
+    internalTransactionId: transaction.id,
+    status: transaction.status,
     psp: pspResponse,
   };
 }
 
-export async function getTransaction(internalId: string) {
-  const res = await query(
-    `SELECT * FROM transactions WHERE internal_id = $1`,
-    [internalId]
-  );
-  return res.rows[0];
-}
-
-export async function updateTransaction(
-  internalId: string,
-  status: TransactionStatus,
-  amount?: number
-) {
-  if (amount !== undefined) {
-    await query(
-      `UPDATE transactions SET status = $1, amount = $2 WHERE internal_id = $3`,
-      [status, amount, internalId]
-    );
-  } else {
-    await query(
-      `UPDATE transactions SET status = $1 WHERE internal_id = $2`,
-      [status, internalId]
-    );
-  }
+export async function getTransactionById(internalId: string) {
+  return transactionRepository.findByInternalId(internalId);
 }
