@@ -23,28 +23,31 @@ function mapPspStatusToInternal(
 }
 
 export async function handlePspWebhook(payload: WebhookPayload) {
-  // Load transaction
-  const transaction =
-    await transactionRepository.findByPspTransactionId(
-      payload.transactionId
-    );
+  const transaction = await transactionRepository.findByPspTransactionId(payload.transactionId);
 
   if (!transaction) {
-    throw new Error(
-      `Transaction not found for PSP ID ${payload.transactionId}`
-    );
+    throw new Error(`Transaction not found for PSP ID ${payload.transactionId}`);
   }
 
-  // Update amount if provided
+  const targetStatus = mapPspStatusToInternal(payload.status);
+
+  // --- IDEMPOTENCY CHECK ---
+  // If the status is already the same, we skip processing to "ignore" the duplicate.
+  if (transaction.status === targetStatus) {
+    return {
+      status: transaction.status,
+      amount: transaction.amount,
+      ignored: true // Optional flag for internal logging
+    };
+  }
+
   if (payload.final_amount !== undefined) {
     transaction.updateAmount(payload.final_amount);
   }
 
-  // Map & transition state (idempotent by design)
-  const targetStatus = mapPspStatusToInternal(payload.status);
+  // This should throw an error if the transition is illegal (e.g., SUCCESS -> FAILED)
   transaction.transitionTo(targetStatus);
 
-  // Persist
   await transactionRepository.update(transaction);
 
   return {

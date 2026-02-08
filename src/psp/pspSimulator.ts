@@ -66,6 +66,9 @@ export async function sendPspWebhook(
   finalAmount: number,
   finalStatus: "SUCCESS" | "FAILED"
 ) {
+  // Do not send real HTTP requests during tests
+  if (process.env.NODE_ENV === "test") return;
+
   await setTimeout(1000);
 
   await fetch(callbackUrl, {
@@ -78,3 +81,4 @@ export async function sendPspWebhook(
     }),
   });
 }
+
