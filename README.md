@@ -30,7 +30,6 @@ and other required schema when the container starts. No manual setup required.
 
 ### 🛠️ Install & Run
 ```Bash
-# Install dependencies
 npm install
 ```
 ```# Run in development mode
