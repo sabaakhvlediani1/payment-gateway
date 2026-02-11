@@ -20,8 +20,8 @@ class TransactionRepository {
         transaction.pspTransactionId ?? null,
         transaction.status,
         transaction.amount,
-        transaction.finalAmount ?? null, // Add this
-      ]
+        transaction.finalAmount ?? null,
+      ],
     );
   }
 
@@ -40,22 +40,22 @@ class TransactionRepository {
         transaction.status,
         transaction.amount,
         transaction.pspTransactionId ?? null,
-        transaction.finalAmount ?? null, // Add this
+        transaction.finalAmount ?? null,
         transaction.id,
-      ]
+      ],
     );
   }
 
-  // Update BOTH findByInternalId and findByPspTransactionId
-  // to include final_amount in the SELECT and the Transaction.restore call
-  async findByPspTransactionId(pspTransactionId: string): Promise<Transaction | null> {
+  async findByPspTransactionId(
+    pspTransactionId: string,
+  ): Promise<Transaction | null> {
     const res = await query(
       `
       SELECT internal_id, psp_transaction_id, status, amount, final_amount
       FROM transactions
       WHERE psp_transaction_id = $1
       `,
-      [pspTransactionId]
+      [pspTransactionId],
     );
 
     if (res.rows.length === 0) return null;
@@ -66,7 +66,30 @@ class TransactionRepository {
       row.status as TransactionStatus,
       Number(row.amount),
       row.psp_transaction_id ?? undefined,
-      row.final_amount ? Number(row.final_amount) : undefined // Pass final_amount here
+      row.final_amount ? Number(row.final_amount) : undefined,
+    );
+  }
+
+  async findByInternalId(internalId: string): Promise<Transaction | null> {
+    const res = await query(
+      `
+    SELECT internal_id, psp_transaction_id, status, amount, final_amount
+    FROM transactions
+    WHERE internal_id = $1
+    `,
+      [internalId],
+    );
+
+    if (res.rows.length === 0) return null;
+
+    const row = res.rows[0];
+
+    return Transaction.restore(
+      row.internal_id,
+      row.status as TransactionStatus,
+      Number(row.amount),
+      row.psp_transaction_id ?? undefined,
+      row.final_amount ? Number(row.final_amount) : undefined,
     );
   }
 }

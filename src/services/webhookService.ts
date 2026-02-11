@@ -31,13 +31,12 @@ export async function handlePspWebhook(payload: WebhookPayload) {
 
   const targetStatus = mapPspStatusToInternal(payload.status);
 
-  // --- IDEMPOTENCY CHECK ---
   // If the status is already the same, we skip processing to "ignore" the duplicate.
   if (transaction.status === targetStatus) {
     return {
       status: transaction.status,
       amount: transaction.amount,
-      ignored: true // Optional flag for internal logging
+      ignored: true 
     };
   }
 

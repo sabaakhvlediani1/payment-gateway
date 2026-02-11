@@ -3,12 +3,12 @@ import { assertValidTransition } from "./TransactionStateMachine.js";
 
 export class Transaction {
   public pspTransactionId?: string;
-  public finalAmount?: number; // Added to track confirmed amount
+  public finalAmount?: number; 
 
   private constructor(
     public readonly id: string,
     public status: TransactionStatus,
-    public readonly amount: number, // Made readonly to preserve the original request record
+    public readonly amount: number, 
   ) {}
 
   static create(id: string, amount: number): Transaction {
@@ -23,7 +23,7 @@ export class Transaction {
     status: TransactionStatus,
     amount: number,
     pspTransactionId?: string,
-    finalAmount?: number, // Added to restore from DB
+    finalAmount?: number, 
   ): Transaction {
     const transaction = new Transaction(id, status, amount);
 
@@ -39,19 +39,18 @@ export class Transaction {
 
   transitionTo(newStatus: TransactionStatus): void {
     if (this.status === newStatus) {
-      return; // idempotent
+      return; 
     }
 
     assertValidTransition(this.status, newStatus);
     this.status = newStatus;
   }
 
-  // Changed this to update finalAmount specifically
+  
   updateAmount(newAmount: number): void {
     if (newAmount <= 0) {
       throw new Error("Transaction amount must be greater than zero");
     }
-    // Logic: Once it's success, we shouldn't be changing the final amount record
     if (this.status === TransactionStatus.SUCCESS && this.finalAmount !== undefined) {
       throw new Error("Cannot change amount after success");
     }
@@ -61,7 +60,7 @@ export class Transaction {
 
   attachPspTransactionId(pspTransactionId: string): void {
     if (this.pspTransactionId) {
-      return; // idempotent
+      return; 
     }
     this.pspTransactionId = pspTransactionId;
   }
