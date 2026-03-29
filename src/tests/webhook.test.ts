@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { transactionRepository } from "../../src/repositories/transactionRepository.js";
 import { TransactionStatus } from "../../src/domain/TransactionStatus.js";
-import { handlePspWebhook } from "../services/webhookService.js";
+import { handlePspWebhook } from "../../src/services/webhookService.js";
 
 // Mock the repository to prevent actual DB calls
 vi.mock("../../src/repositories/transactionRepository.js");

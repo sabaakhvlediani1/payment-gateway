@@ -8,7 +8,7 @@ export async function webhookRoutes(app: FastifyInstance) {
       schema: {
         body: {
           type: "object",
-          required: ["transactionId", "status", "final_amount"],
+          required: ["transactionId", "status"],
           properties: {
             transactionId: { type: "string" },
             status: { type: "string", enum: ["SUCCESS", "FAILED", "3DS_REQUIRED"] },

@@ -11,9 +11,11 @@ class TransactionRepository {
         psp_transaction_id,
         status,
         amount,
-        final_amount -- Add this
+        final_amount,
+        currency,
+        order_id
       )
-      VALUES ($1, $2, $3, $4, $5)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       `,
       [
         transaction.id,
@@ -21,6 +23,8 @@ class TransactionRepository {
         transaction.status,
         transaction.amount,
         transaction.finalAmount ?? null,
+        transaction.currency,
+        transaction.orderId,
       ],
     );
   }
@@ -51,7 +55,7 @@ class TransactionRepository {
   ): Promise<Transaction | null> {
     const res = await query(
       `
-      SELECT internal_id, psp_transaction_id, status, amount, final_amount
+      SELECT internal_id, psp_transaction_id, status, amount, final_amount, currency, order_id
       FROM transactions
       WHERE psp_transaction_id = $1
       `,
@@ -65,6 +69,8 @@ class TransactionRepository {
       row.internal_id,
       row.status as TransactionStatus,
       Number(row.amount),
+      row.currency,
+      row.order_id,
       row.psp_transaction_id ?? undefined,
       row.final_amount ? Number(row.final_amount) : undefined,
     );
@@ -73,10 +79,10 @@ class TransactionRepository {
   async findByInternalId(internalId: string): Promise<Transaction | null> {
     const res = await query(
       `
-    SELECT internal_id, psp_transaction_id, status, amount, final_amount
-    FROM transactions
-    WHERE internal_id = $1
-    `,
+      SELECT internal_id, psp_transaction_id, status, amount, final_amount, currency, order_id
+      FROM transactions
+      WHERE internal_id = $1
+      `,
       [internalId],
     );
 
@@ -88,6 +94,8 @@ class TransactionRepository {
       row.internal_id,
       row.status as TransactionStatus,
       Number(row.amount),
+      row.currency,
+      row.order_id,
       row.psp_transaction_id ?? undefined,
       row.final_amount ? Number(row.final_amount) : undefined,
     );

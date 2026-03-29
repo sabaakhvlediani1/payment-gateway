@@ -1,8 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { TransactionStatus } from "../domain/TransactionStatus.js";
-import {
-  canTransition,
-} from "../domain/TransactionStateMachine.js";
+import { TransactionStatus } from "../../src/domain/TransactionStatus.js";
+import { canTransition } from "../../src/domain/TransactionStateMachine.js";
 
 describe("Transaction State Machine", () => {
   it("allows valid transitions", () => {

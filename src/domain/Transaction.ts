@@ -3,29 +3,33 @@ import { assertValidTransition } from "./TransactionStateMachine.js";
 
 export class Transaction {
   public pspTransactionId?: string;
-  public finalAmount?: number; 
+  public finalAmount?: number;
 
   private constructor(
     public readonly id: string,
     public status: TransactionStatus,
-    public readonly amount: number, 
+    public readonly amount: number,
+    public readonly currency: string,
+    public readonly orderId: string,
   ) {}
 
-  static create(id: string, amount: number): Transaction {
+  static create(id: string, amount: number, currency: string, orderId: string): Transaction {
     if (amount <= 0) {
       throw new Error("Transaction amount must be greater than zero");
     }
-    return new Transaction(id, TransactionStatus.CREATED, amount);
+    return new Transaction(id, TransactionStatus.CREATED, amount, currency, orderId);
   }
 
   static restore(
     id: string,
     status: TransactionStatus,
     amount: number,
+    currency: string,
+    orderId: string,
     pspTransactionId?: string,
-    finalAmount?: number, 
+    finalAmount?: number,
   ): Transaction {
-    const transaction = new Transaction(id, status, amount);
+    const transaction = new Transaction(id, status, amount, currency, orderId);
 
     if (pspTransactionId) {
       transaction.pspTransactionId = pspTransactionId;

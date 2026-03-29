@@ -23,7 +23,7 @@ describe("createTransaction", () => {
     vi.clearAllMocks();
   });
 
-  it("creates transaction and saves SUCCESS status", async () => {
+  it("saves with CREATED status first, then updates after PSP responds with SUCCESS", async () => {
     (psp.createPspTransaction as any).mockResolvedValue({
       transactionId: "psp123",
       status: "SUCCESS",
@@ -31,21 +31,26 @@ describe("createTransaction", () => {
 
     const result = await createTransaction(payload);
 
+    // Transaction must be saved to DB before PSP is called (race condition fix)
     expect(transactionRepository.save).toHaveBeenCalledTimes(1);
+    // Then updated after PSP responds
+    expect(transactionRepository.update).toHaveBeenCalledTimes(1);
 
     expect(result.status).toBe(TransactionStatus.SUCCESS);
     expect(result.psp.transactionId).toBe("psp123");
   });
 
-  it("marks transaction FAILED if PSP call throws", async () => {
-    (psp.createPspTransaction as any).mockRejectedValue(
-      new Error("PSP down")
-    );
+  it("throws and does not call update if PSP call fails", async () => {
+    (psp.createPspTransaction as any).mockRejectedValue(new Error("PSP down"));
 
-    await expect(createTransaction(payload)).rejects.toThrow();
+    await expect(createTransaction(payload)).rejects.toThrow("PSP down");
+
+    // save was called (transaction persisted as CREATED) but update was never reached
+    expect(transactionRepository.save).toHaveBeenCalledTimes(1);
+    expect(transactionRepository.update).not.toHaveBeenCalled();
   });
 
-  it("sets PENDING_3DS when PSP requires 3DS", async () => {
+  it("saves with CREATED first, then updates to PENDING_3DS when PSP requires 3DS", async () => {
     (psp.createPspTransaction as any).mockResolvedValue({
       transactionId: "psp123",
       status: "PENDING_3DS",
@@ -53,6 +58,8 @@ describe("createTransaction", () => {
 
     const result = await createTransaction(payload);
 
+    expect(transactionRepository.save).toHaveBeenCalledTimes(1);
+    expect(transactionRepository.update).toHaveBeenCalledTimes(1);
     expect(result.status).toBe(TransactionStatus.PENDING_3DS);
   });
 });

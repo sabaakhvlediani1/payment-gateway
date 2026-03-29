@@ -1,5 +1,5 @@
 import { FastifyInstance } from "fastify";
-import { createPspTransaction, sendPspWebhook } from "../psp/pspSimulator.js";
+import { createPspTransaction, complete3dsChallenge } from "../psp/pspSimulator.js";
 
 export async function pspRoutes(app: FastifyInstance) {
   app.post(
@@ -46,9 +46,8 @@ export async function pspRoutes(app: FastifyInstance) {
       amount: string;
     };
 
-    setTimeout(() => {
-      sendPspWebhook(transactionId, callbackUrl, Number(amount), "SUCCESS");
-    }, 5000);
+    // Run 3DS challenge in background — sends webhook after 2s with SUCCESS or FAILED
+    complete3dsChallenge(transactionId, callbackUrl, Number(amount));
 
     return reply.send({
       message: `3DS authentication completed for ${transactionId}`,
