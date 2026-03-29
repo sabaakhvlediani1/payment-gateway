@@ -37,7 +37,7 @@ class TransactionRepository {
         status = $1,
         amount = $2,
         psp_transaction_id = $3,
-        final_amount = $4 -- Add this
+        final_amount = $4
       WHERE internal_id = $5
       `,
       [

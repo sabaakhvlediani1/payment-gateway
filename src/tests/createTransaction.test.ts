@@ -31,9 +31,7 @@ describe("createTransaction", () => {
 
     const result = await createTransaction(payload);
 
-    // Transaction must be saved to DB before PSP is called (race condition fix)
     expect(transactionRepository.save).toHaveBeenCalledTimes(1);
-    // Then updated after PSP responds
     expect(transactionRepository.update).toHaveBeenCalledTimes(1);
 
     expect(result.status).toBe(TransactionStatus.SUCCESS);
@@ -45,7 +43,6 @@ describe("createTransaction", () => {
 
     await expect(createTransaction(payload)).rejects.toThrow("PSP down");
 
-    // save was called (transaction persisted as CREATED) but update was never reached
     expect(transactionRepository.save).toHaveBeenCalledTimes(1);
     expect(transactionRepository.update).not.toHaveBeenCalled();
   });

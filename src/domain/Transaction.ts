@@ -43,7 +43,7 @@ export class Transaction {
 
   transitionTo(newStatus: TransactionStatus): void {
     if (this.status === newStatus) {
-      return; 
+      return;
     }
 
     assertValidTransition(this.status, newStatus);
@@ -64,7 +64,7 @@ export class Transaction {
 
   attachPspTransactionId(pspTransactionId: string): void {
     if (this.pspTransactionId) {
-      return; 
+      return;
     }
     this.pspTransactionId = pspTransactionId;
   }

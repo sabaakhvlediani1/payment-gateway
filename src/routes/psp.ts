@@ -38,7 +38,6 @@ export async function pspRoutes(app: FastifyInstance) {
     },
   );
 
-  // Fake 3DS completion endpoint
   app.get("/psp/3ds/:transactionId", async (request, reply) => {
     const { transactionId } = request.params as { transactionId: string };
     const { callbackUrl, amount } = request.query as {
@@ -46,7 +45,6 @@ export async function pspRoutes(app: FastifyInstance) {
       amount: string;
     };
 
-    // Run 3DS challenge in background — sends webhook after 2s with SUCCESS or FAILED
     complete3dsChallenge(transactionId, callbackUrl, Number(amount));
 
     return reply.send({

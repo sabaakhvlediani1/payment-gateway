@@ -4,7 +4,7 @@ const app = buildApp();
 
 const start = async () => {
   try {
-    await app.listen({ port: 3000, host: '0.0.0.0' }); // Listen on all interfaces (required for Docker/containers)
+    await app.listen({ port: 3000, host: '0.0.0.0' });
     console.log("Server is running on http://localhost:3000");
   } catch (err) {
     app.log.error(err);

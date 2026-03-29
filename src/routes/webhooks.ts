@@ -21,7 +21,6 @@ export async function webhookRoutes(app: FastifyInstance) {
       try {
         const result = await handlePspWebhook(request.body as any);
 
-        // Log for debugging/monitoring
         request.log.info({ webhookProcessed: result });
         
         if (process.env.NODE_ENV !== "production") {

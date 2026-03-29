@@ -3,11 +3,10 @@ import { transactionRepository } from "../../src/repositories/transactionReposit
 import { TransactionStatus } from "../../src/domain/TransactionStatus.js";
 import { handlePspWebhook } from "../../src/services/webhookService.js";
 
-// Mock the repository to prevent actual DB calls
 vi.mock("../../src/repositories/transactionRepository.js");
 
 describe("handlePspWebhook", () => {
-  
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -42,7 +41,7 @@ describe("handlePspWebhook", () => {
   it("is idempotent when same webhook arrives twice", async () => {
     const mockTx = {
       amount: 100,
-      status: TransactionStatus.SUCCESS, 
+      status: TransactionStatus.SUCCESS,
       updateAmount: vi.fn(),
       transitionTo: vi.fn(),
     };
@@ -55,7 +54,6 @@ describe("handlePspWebhook", () => {
       final_amount: 100,
     });
 
-    // If the status is already SUCCESS, we should NOT call transitionTo or update again
     expect(mockTx.transitionTo).not.toHaveBeenCalled();
     expect(transactionRepository.update).not.toHaveBeenCalled();
     expect(result.status).toBe(TransactionStatus.SUCCESS);
@@ -73,7 +71,6 @@ describe("handlePspWebhook", () => {
     const mockTx = {
       status: TransactionStatus.SUCCESS,
       transitionTo: vi.fn(() => {
-        // Simulating the Domain Logic rejection
         throw new Error("Invalid transition from SUCCESS to PENDING_3DS");
       }),
     };
@@ -83,7 +80,7 @@ describe("handlePspWebhook", () => {
     await expect(
       handlePspWebhook({
         transactionId: "psp123",
-        status: "3DS_REQUIRED", // maps to PENDING_3DS
+        status: "3DS_REQUIRED",
       })
     ).rejects.toThrow("Invalid transition");
   });

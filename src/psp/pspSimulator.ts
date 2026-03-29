@@ -3,8 +3,8 @@ import { randomUUID } from "crypto";
 
 export type PspStatus = "PENDING_3DS" | "SUCCESS" | "FAILED";
 
-const WEBHOOK_DELAY_MS = 1000;    // Simulates PSP network latency before callback
-const THREE_DS_DELAY_MS = 2000;   // Simulates customer completing 3DS challenge
+const WEBHOOK_DELAY_MS = 1000;
+const THREE_DS_DELAY_MS = 2000;
 
 interface PspTransactionRequest {
   amount: number;
@@ -29,9 +29,6 @@ export async function createPspTransaction(
   const prefix = req.cardNumber.slice(0, 4);
   const transactionId = `tx_${randomUUID()}`;
 
-  // Note: req.failureUrl is accepted per PSP contract but not used in this simulator.
-  // A real PSP would redirect the user to failureUrl on terminal failure.
-
   switch (prefix) {
     case "4111":
       return {
@@ -41,14 +38,11 @@ export async function createPspTransaction(
       };
 
     case "5555":
-      // Fire webhook in background — do NOT await, so we return the transactionId
-      // to the service first, allowing it to persist to DB before webhook arrives
       sendPspWebhook(transactionId, req.callbackUrl, req.amount, "SUCCESS");
       return { transactionId, status: "SUCCESS" };
 
     case "4000":
     default:
-      // Same as above — fire and forget so DB is updated before webhook arrives
       sendPspWebhook(transactionId, req.callbackUrl, req.amount, "FAILED");
       return { transactionId, status: "FAILED" };
   }
@@ -75,7 +69,6 @@ export async function sendPspWebhook(
   finalAmount: number,
   finalStatus: "SUCCESS" | "FAILED"
 ) {
-  // Do not send real HTTP requests during tests
   if (process.env.NODE_ENV === "test") return;
 
   await setTimeout(WEBHOOK_DELAY_MS);
@@ -90,4 +83,3 @@ export async function sendPspWebhook(
     }),
   });
 }
-

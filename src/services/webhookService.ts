@@ -2,7 +2,7 @@ import { transactionRepository } from "../repositories/transactionRepository.js"
 import { TransactionStatus } from "../domain/TransactionStatus.js";
 
 export interface WebhookPayload {
-  transactionId: string; // PSP transaction ID
+  transactionId: string;
   final_amount?: number;
   status: "SUCCESS" | "FAILED" | "3DS_REQUIRED";
 }
@@ -31,12 +31,11 @@ export async function handlePspWebhook(payload: WebhookPayload) {
 
   const targetStatus = mapPspStatusToInternal(payload.status);
 
-  // If the status is already the same, we skip processing to "ignore" the duplicate.
   if (transaction.status === targetStatus) {
     return {
       status: transaction.status,
       amount: transaction.amount,
-      ignored: true 
+      ignored: true,
     };
   }
 
@@ -44,7 +43,6 @@ export async function handlePspWebhook(payload: WebhookPayload) {
     transaction.updateAmount(payload.final_amount);
   }
 
-  // This should throw an error if the transition is illegal (e.g., SUCCESS -> FAILED)
   transaction.transitionTo(targetStatus);
 
   await transactionRepository.update(transaction);
